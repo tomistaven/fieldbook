@@ -1,6 +1,6 @@
 # Fieldbook — Technical Overview
 
-This document covers the architecture, the database and its reactive streams, note encryption, each feature's internals (todos, shopping, the Pomodoro timer, notes, flashcards), the app shell, dependency injection, and the key constants. The README covers features and setup; this covers the code.
+This document covers the architecture, the database and its reactive streams, note encryption, each feature's internals (todos, shopping, the Pomodoro timer and its phase-end notification, notes, flashcards), the app shell, dependency injection, and the key constants. The README covers features and setup; this covers the code.
 
 ---
 
@@ -12,6 +12,7 @@ This document covers the architecture, the database and its reactive streams, no
 - [Todos](#todos)
 - [Shopping](#shopping)
 - [The Pomodoro Timer](#the-pomodoro-timer)
+- [Phase-End Notification](#phase-end-notification)
 - [Notes and Autosave](#notes-and-autosave)
 - [Flashcards and the Leitner System](#flashcards-and-the-leitner-system)
 - [App Shell, Messengers, and the Phase Alert](#app-shell-messengers-and-the-phase-alert)
@@ -26,9 +27,9 @@ This document covers the architecture, the database and its reactive streams, no
 
 The project uses Flutter Clean Architecture with three layers plus a shared core.
 
-**Domain layer** (`lib/domain/`) defines the entities (`Todo`, `ShoppingItem`, `Note`, `Deck`, `Flashcard`, `PomodoroSettings`) and the abstract repository interfaces. It also holds the two pieces of pure logic: `nextPhase()` for Pomodoro phase transitions and `Leitner.next()` for flashcard boxes. There are no Flutter imports and no external packages beyond `equatable`, which keeps both pieces of logic unit-testable without a widget tree or a database.
+**Domain layer** (`lib/domain/`) defines the entities (`Todo`, `ShoppingItem`, `Note`, `Deck`, `Flashcard`, `PomodoroSettings`), the abstract repository interfaces, and the `PhaseNotifier` service interface. It also holds the two pieces of pure logic: `nextPhase()` for Pomodoro phase transitions and `Leitner.next()` for flashcard boxes. There are no Flutter imports and no external packages beyond `equatable`, which keeps both pieces of logic unit-testable without a widget tree or a database.
 
-**Data layer** (`lib/data/`) implements the repositories over Drift. `datasources/` holds the database definition and `EncryptionService`. `models/` maps Drift row classes to domain entities, and `repositories/` holds the `*RepositoryImpl` classes. The data layer knows about Drift, SQLite, and secure storage, but not about widgets.
+**Data layer** (`lib/data/`) implements the repositories over Drift. `datasources/` holds the database definition, `EncryptionService`, and `NotificationService`. `models/` maps Drift row classes to domain entities, and `repositories/` holds the `*RepositoryImpl` classes. The data layer knows about Drift, SQLite, secure storage, and the notification plugin, but not about widgets.
 
 **Presentation layer** (`lib/presentation/`) is split per feature: `todos/`, `shopping/`, `focus/`, `notes/`, `flashcards/`, `settings/`, plus `shell/` for the bottom navigation. Each feature has `cubit/` (a Cubit with its state in a separate `*_state.dart`), `screens/`, and `widgets/`. Dialog, sheet, and snackbar flows are extracted into `*_actions.dart` mixins (`mixin TodoActions on State<TodoScreen>`), so the screen's `build()` holds layout only. Screens talk to Cubits, never directly to a repository. The two exceptions are the note editor and the screen-scoped flashcard Cubits, both covered below.
 
@@ -171,6 +172,7 @@ Timer state is written to shared preferences on every start, pause, reset, skip,
 | `pomo.focusInCycle` | Completed focus sessions since the last long break |
 | `pomo.todayDate` / `pomo.todayCount` | Today's completed focus sessions, keyed by date |
 | `pomo.focusMinutes` … `pomo.autoStartNext` | User settings |
+| `pomo.notificationPermissionAsked` | Whether the notification permission prompt has been shown |
 
 The constructor restores this state synchronously; `SharedPreferences` is already loaded by `initDependencies()`. If the restored status is running and the end time has passed, the phase ended while the app was closed. `_complete(silent: true)` then advances it without haptics, without the alert banner, and without auto-starting the next phase. Auto-starting from a stale end time would start the next phase at the wrong moment.
 
@@ -190,6 +192,61 @@ The comparison is `>=` rather than `==`, so lowering `sessionsBeforeLongBreak` b
 ### Daily count
 
 `completedToday` is stored with the date it belongs to (`pomo.todayDate`). On launch, a stored date that isn't today resets the count to 0. On completion, the Cubit also checks whether the date changed since the last write, so a session that finishes after midnight starts the new day's count.
+
+---
+
+## Phase-End Notification
+
+The in-app banner covers a phase that ends while the app is visible. `NotificationService` (`data/datasources/notification_service.dart`) covers the rest, through the `PhaseNotifier` interface (`domain/services/phase_notifier.dart`), so `PomodoroCubit` has no dependency on the plugin.
+
+### Scheduling on the app lifecycle
+
+`PomodoroCubit` owns an `AppLifecycleListener`:
+
+| Event | Action |
+| --- | --- |
+| `onHide` | If the timer is running, schedule one notification at `_endsAt` |
+| `onShow` | Cancel it; this also removes a delivered notification from the tray |
+| Constructor | Cancel any leftover from a previous session; the app is visible at launch |
+| `start()` while hidden | Schedule for the new phase; reached only through auto-start when the isolate is still alive |
+
+Scheduling only while hidden means the notification and the banner never fire for the same phase, and nothing has to race `_complete()` to cancel a notification in the foreground. Because the timer already derives from an absolute end time, the notification is a single alarm registered with Android. No background isolate or foreground service runs, and the alarm fires even after the process has been killed.
+
+The notification title and body come from the current phase and `nextPhase(completed: true)`, so a focus session announces the correct short or long break. All notifications share one id (`_phaseEndId`), so a new schedule replaces the previous one.
+
+### UTC instead of the device time zone
+
+`zonedSchedule()` takes a `TZDateTime`. The device time zone only matters for recurring, wall-clock schedules such as "every day at 9:00". A one-shot alarm at an absolute instant fires at the same moment in any zone, so the end time is converted with `TZDateTime.from(endsAt, tz.UTC)`. That avoids adding `flutter_timezone` and loading the time zone database. A date that is not in the future is skipped, because `zonedSchedule()` throws for it.
+
+### Exact alarms and the manifest
+
+The schedule mode is `AndroidScheduleMode.exactAllowWhileIdle`, so Doze cannot defer the alert by minutes. `AndroidManifest.xml` declares:
+
+| Entry | Purpose |
+| --- | --- |
+| `USE_EXACT_ALARM` | Exact alarms on API 33+, granted at install |
+| `SCHEDULE_EXACT_ALARM` (`maxSdkVersion="32"`) | Exact alarms on API 31–32, where it is also granted at install |
+| `RECEIVE_BOOT_COMPLETED` | Lets the plugin restore a pending alarm after a reboot |
+| `ScheduledNotificationReceiver`, `ScheduledNotificationBootReceiver` | The plugin's receivers that post the notification and reschedule after boot |
+
+`USE_EXACT_ALARM` is restricted by Google Play policy to alarm and calendar apps. Fieldbook is distributed as an APK, so the policy does not apply; a Play release would need to revisit this.
+
+The plugin also requires core library desugaring (`isCoreLibraryDesugaringEnabled` and `desugar_jdk_libs` in `android/app/build.gradle.kts`). The status bar icon is a monochrome vector (`res/drawable/ic_notification.xml`), because Android renders only the icon's alpha channel. It is referenced from Dart by name only, so `res/raw/keep.xml` stops R8 resource shrinking from removing it in release builds.
+
+### Permission
+
+On Android 13+ posting notifications needs a runtime permission. The prompt is shown on the first timer start rather than at launch, so it appears when the reason for it is visible. `pomo.notificationPermissionAsked` makes sure it is requested only once; after that the choice is left to system settings. If permission is denied, scheduling still runs and Android silently drops the notification, so the timer behaves the same.
+
+### Opening Focus from a tap
+
+A tap reaches the app in one of two ways, and the plugin reports them differently:
+
+| Case | Source | Handling |
+| --- | --- | --- |
+| The tap starts the process | `getNotificationAppLaunchDetails().didNotificationLaunchApp`, read in `NotificationService.init()` | `AppShell.initState()` starts on the Focus tab when `launchedFromAlert` is true |
+| The process is still alive | `onDidReceiveNotificationResponse` | Forwarded to the `alertOpened` stream; the shell listens and calls `_select(_focusTab)` |
+
+A plugin issue (MaikuB/flutter_local_notifications#1926) reported that `didNotificationLaunchApp` could stay true when the app is later reopened from recents. This was checked with the current plugin version: after a notification launch, swiping the app away and reopening it starts on Todos as expected.
 
 ---
 
@@ -290,6 +347,7 @@ All registrations are in `lib/injection_container.dart`, run in `main()` before 
 | --- | --- | --- |
 | `SharedPreferences` | Eager singleton | Must be awaited before any Cubit reads it |
 | `EncryptionService` | Eager singleton | Key must be loaded from secure storage before any note is read |
+| `NotificationService` (as `PhaseNotifier`) | Eager singleton | Plugin must be initialised and the launch details read before the shell builds |
 | `AppDatabase` | Lazy singleton | One connection for the whole app |
 | `TodoRepository`, `ShoppingRepository`, `NoteRepository`, `FlashcardRepository` | Lazy singleton | One implementation each, registered against the abstract interface |
 | `SettingsCubit` | Lazy singleton | Drives `MaterialApp.themeMode`; shared with the Settings screen |

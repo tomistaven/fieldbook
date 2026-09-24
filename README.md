@@ -72,6 +72,7 @@ For the architecture, database, timer, encryption, and study-session internals i
 | Settings | Focus 1–120 min, short break 1–60, long break 1–90, sessions per cycle 1–12, optional auto-start |
 | Survives restarts | A running timer keeps counting while the app is backgrounded or closed |
 | Phase alert | A banner at the top of whichever tab is open, with **Open** and **Dismiss** |
+| System notification | Arrives when a phase ends while the app is in the background or closed; tapping it opens Focus |
 | Daily count | Focus sessions completed today |
 
 ### Notes
@@ -110,7 +111,6 @@ For the architecture, database, timer, encryption, and study-session internals i
 
 | Feature | Notes |
 | --- | --- |
-| Pomodoro system notification | Alert when a phase ends while the app is in the background; needs `flutter_local_notifications` and native setup |
 | Multiple shopping lists | New `lists` table plus a list picker |
 | Backup and export | Export the database or a JSON dump; notes would need decrypting or the key exporting |
 | Sync | A small backend (Go) or a hosted service |
@@ -132,6 +132,8 @@ For the architecture, database, timer, encryption, and study-session internals i
 | `encrypt` | AES encryption of note titles and bodies |
 | `flutter_secure_storage` | Stores the encryption key in the Android Keystore / iOS Keychain |
 | `shared_preferences` | Persists the theme mode, Pomodoro settings, and running-timer state |
+| `flutter_local_notifications` | Schedules the Pomodoro phase-end notification |
+| `timezone` | Provides the `TZDateTime` that `flutter_local_notifications` schedules with |
 | `intl` | Locale-aware date labels |
 | `drift_dev` / `build_runner` *(dev)* | Generate the Drift database code (`app_database.g.dart`) |
 | `flutter_launcher_icons` *(dev)* | Generates launcher icons from a single source asset |
@@ -192,6 +194,8 @@ The tune icon opens timer settings: phase lengths, sessions per cycle, and wheth
 
 The timer keeps running if you leave the app. When you come back, it shows the correct remaining time, or the next phase if the current one finished while you were away.
 
+If a phase ends while the app is in the background or closed, a system notification arrives instead of the banner. Tapping it opens Focus. The first time you start the timer, Android asks for permission to show notifications. If you decline, the timer works the same, just without the notification; the choice can be changed later in the system app settings.
+
 ### Using Notes
 
 Tap the pen button to write a note. It saves automatically while you type and when you leave the editor. A new note that you leave empty is not saved, and a note you empty out is deleted when you leave. Search matches titles and bodies. Long-press a note in the list to pin it to the top or delete it. In the editor, the copy icon puts the note on the clipboard.
@@ -233,6 +237,10 @@ A countdown that decrements a counter every tick drifts, and it stops entirely w
 ### A phase alert that reaches whichever tab is open
 
 The first version showed a snackbar at the bottom of the screen, which was easy to miss. The alert is now a `MaterialBanner` at the top of the open tab. Each tab has its own `ScaffoldMessenger` with a stored key, so the shell can target the tab the user is actually looking at. Tab-local snackbars such as Undo still lift that tab's FAB rather than overlapping it.
+
+### A notification only while the app is hidden
+
+The in-app banner already covers a phase that ends while Fieldbook is open, so a system notification is only needed when it isn't. The Pomodoro Cubit listens to the app lifecycle: when the app is hidden with the timer running, it schedules one notification for the stored end time, and when the app is shown again, it cancels it. Because the timer already works from an absolute end time, no background process is needed. Android's alarm service delivers the notification even after the app has been swiped away. Exact alarms are used so Doze mode cannot delay the alert by minutes.
 
 ### Dialogs own their text controllers
 
