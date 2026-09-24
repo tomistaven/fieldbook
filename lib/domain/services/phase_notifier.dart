@@ -19,4 +19,10 @@ abstract interface class PhaseNotifier {
 
   /// Cancels the scheduled alert and removes it from the tray if shown.
   Future<void> cancelPhaseEnd();
+
+  /// Whether the app process was started by tapping the alert.
+  bool get launchedFromAlert;
+
+  /// Emits when the alert is tapped while the app process is still alive.
+  Stream<void> get alertOpened;
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -12,6 +14,16 @@ import '../../domain/services/phase_notifier.dart';
 class NotificationService implements PhaseNotifier {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+
+  // App-lifetime singleton, so the controller is never closed.
+  final StreamController<void> _alertOpened = StreamController.broadcast();
+  bool _launchedFromAlert = false;
+
+  @override
+  bool get launchedFromAlert => _launchedFromAlert;
+
+  @override
+  Stream<void> get alertOpened => _alertOpened.stream;
 
   /// A single id: only one phase can be pending at a time, and reusing the id
   /// makes a new schedule replace the previous one.
@@ -38,7 +50,12 @@ class NotificationService implements PhaseNotifier {
           requestSoundPermission: false,
         ),
       ),
+      // Tap while the process is alive. A tap that starts the process does
+      // not reach this callback; it is read from the launch details below.
+      onDidReceiveNotificationResponse: (_) => _alertOpened.add(null),
     );
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    _launchedFromAlert = launch?.didNotificationLaunchApp ?? false;
   }
 
   @override

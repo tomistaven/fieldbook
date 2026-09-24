@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/entities/pomodoro.dart';
+import '../../domain/services/phase_notifier.dart';
+import '../../injection_container.dart';
 import '../flashcards/screens/decks_screen.dart';
 import '../focus/cubit/pomodoro_cubit.dart';
 import '../focus/cubit/pomodoro_state.dart';
@@ -22,6 +26,7 @@ class _AppShellState extends State<AppShell> {
   static const _focusTab = 2;
 
   int _index = 0;
+  StreamSubscription<void>? _alertOpenedSub;
 
   // Each tab gets its own ScaffoldMessenger so snackbars and banners attach
   // to the tab's Scaffold (below its AppBar, above its FAB) instead of the
@@ -38,6 +43,22 @@ class _AppShellState extends State<AppShell> {
     NotesScreen(),
     DecksScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Tapping the phase-end notification opens the Focus tab, whether the
+    // tap started the app or brought a running one to the front.
+    final notifier = sl<PhaseNotifier>();
+    if (notifier.launchedFromAlert) _index = _focusTab;
+    _alertOpenedSub = notifier.alertOpened.listen((_) => _select(_focusTab));
+  }
+
+  @override
+  void dispose() {
+    _alertOpenedSub?.cancel();
+    super.dispose();
+  }
 
   void _select(int index) {
     _clearBanners();
