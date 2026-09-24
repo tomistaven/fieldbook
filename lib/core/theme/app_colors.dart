@@ -23,6 +23,9 @@ abstract final class AppColors {
 
   // Accent
   static const Color accent = Color(0xFF10B981); // emerald-500
+  // Accent on the light inverse surface used by snackbars in dark mode;
+  // emerald-500 is only 2.3:1 on gray-100, this is 5.0:1.
+  static const Color accentOnLight = Color(0xFF047857); // emerald-700
 
   // Pomodoro phases
   static const Color focus = Color(0xFFE11D48); // rose-600

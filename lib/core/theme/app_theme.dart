@@ -16,6 +16,7 @@ abstract final class AppTheme {
     textPrimary: AppColors.textPrimary,
     textSecondary: AppColors.textSecondary,
     textHint: AppColors.textHint,
+    inversePrimary: AppColors.accent,
   );
 
   static ThemeData get dark => _build(
@@ -26,6 +27,7 @@ abstract final class AppTheme {
     textPrimary: AppColors.darkTextPrimary,
     textSecondary: AppColors.darkTextSecondary,
     textHint: AppColors.darkTextHint,
+    inversePrimary: AppColors.accentOnLight,
   );
 
   static ThemeData _build({
@@ -36,6 +38,7 @@ abstract final class AppTheme {
     required Color textPrimary,
     required Color textSecondary,
     required Color textHint,
+    required Color inversePrimary,
   }) {
     return ThemeData(
       useMaterial3: true,
@@ -55,6 +58,13 @@ abstract final class AppTheme {
         outlineVariant: border,
         error: AppColors.danger,
         onError: Colors.white,
+        // Snackbars draw on the inverse surface and color their action with
+        // inversePrimary. Left unset, inversePrimary falls back to onPrimary
+        // (white), which is invisible on the light inverse surface in dark
+        // mode.
+        inverseSurface: textPrimary,
+        onInverseSurface: surface,
+        inversePrimary: inversePrimary,
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: background,
