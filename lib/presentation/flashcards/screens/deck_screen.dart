@@ -5,6 +5,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../domain/entities/flashcard.dart';
 import '../../../domain/repositories/flashcard_repository.dart';
 import '../../../injection_container.dart';
+import '../../settings/widgets/add_button_side.dart';
 import '../cubit/deck_cards_cubit.dart';
 import '../cubit/deck_cards_state.dart';
 import '../cubit/decks_cubit.dart';
@@ -37,6 +38,9 @@ class _DeckScreenState extends State<DeckScreen> with DeckActions {
 
   @override
   Widget build(BuildContext context) {
+    // Read here, not in _buildDeck: that runs inside the BlocBuilder below,
+    // where this State's context is not the one being built.
+    final fabLocation = context.addButtonLocation;
     return BlocProvider.value(
       value: cardsCubit,
       child: BlocBuilder<DecksCubit, DecksState>(
@@ -44,13 +48,13 @@ class _DeckScreenState extends State<DeckScreen> with DeckActions {
           final deck = decksState.byId(widget.deckId);
           // Deck was deleted; the pop is already under way.
           if (deck == null) return const Scaffold();
-          return _buildDeck(deck);
+          return _buildDeck(deck, fabLocation);
         },
       ),
     );
   }
 
-  Widget _buildDeck(Deck deck) {
+  Widget _buildDeck(Deck deck, FloatingActionButtonLocation fabLocation) {
     return Scaffold(
       appBar: AppBar(
         title: Text(deck.name),
@@ -120,6 +124,7 @@ class _DeckScreenState extends State<DeckScreen> with DeckActions {
           );
         },
       ),
+      floatingActionButtonLocation: fabLocation,
       floatingActionButton: FloatingActionButton(
         heroTag: 'deck-fab',
         tooltip: 'New card',

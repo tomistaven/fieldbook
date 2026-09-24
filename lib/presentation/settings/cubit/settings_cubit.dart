@@ -13,6 +13,7 @@ class SettingsCubit extends Cubit<SettingsState> {
   final SharedPreferences _prefs;
 
   static const _themeKey = 'theme_mode';
+  static const _addButtonsOnLeftKey = 'add_buttons_on_left';
 
   void _loadAll() {
     final mode = switch (_prefs.getString(_themeKey)) {
@@ -20,7 +21,15 @@ class SettingsCubit extends Cubit<SettingsState> {
       'dark' => ThemeMode.dark,
       _ => ThemeMode.system,
     };
-    emit(state.copyWith(themeMode: mode));
+    emit(state.copyWith(
+      themeMode: mode,
+      addButtonsOnLeft: _prefs.getBool(_addButtonsOnLeftKey) ?? false,
+    ));
+  }
+
+  void setAddButtonsOnLeft(bool value) {
+    _prefs.setBool(_addButtonsOnLeftKey, value);
+    emit(state.copyWith(addButtonsOnLeft: value));
   }
 
   void setTheme(ThemeMode mode) {

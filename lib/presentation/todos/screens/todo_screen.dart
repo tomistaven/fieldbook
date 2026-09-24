@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/widgets/empty_state.dart';
+import '../../settings/widgets/add_button_side.dart';
 import '../../settings/widgets/settings_button.dart';
 import '../cubit/todo_cubit.dart';
 import '../cubit/todo_state.dart';
@@ -76,6 +77,7 @@ class _TodoScreenState extends State<TodoScreen> with TodoActions {
           );
         },
       ),
+      floatingActionButtonLocation: context.addButtonLocation,
       floatingActionButton: FloatingActionButton(
         heroTag: 'todos-fab',
         tooltip: 'New todo',

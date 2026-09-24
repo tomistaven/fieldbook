@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/widgets/empty_state.dart';
 import '../../../domain/entities/shopping_item.dart';
+import '../../settings/widgets/add_button_side.dart';
 import '../../settings/widgets/settings_button.dart';
 import '../cubit/shopping_cubit.dart';
 import '../cubit/shopping_state.dart';
@@ -68,7 +69,10 @@ class _ShoppingScreenState extends State<ShoppingScreen> with ShoppingActions {
               },
             ),
           ),
-          QuickAddBar(onAdd: cubit.add),
+          QuickAddBar(
+            onAdd: cubit.add,
+            buttonOnLeft: context.addButtonsOnLeft,
+          ),
         ],
       ),
     );

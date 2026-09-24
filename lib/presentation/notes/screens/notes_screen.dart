@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/widgets/empty_state.dart';
+import '../../settings/widgets/add_button_side.dart';
 import '../../settings/widgets/settings_button.dart';
 import '../cubit/notes_cubit.dart';
 import '../cubit/notes_state.dart';
@@ -67,6 +68,7 @@ class _NotesScreenState extends State<NotesScreen> with NotesActions {
           ),
         ],
       ),
+      floatingActionButtonLocation: context.addButtonLocation,
       floatingActionButton: FloatingActionButton(
         heroTag: 'notes-fab',
         tooltip: 'New note',

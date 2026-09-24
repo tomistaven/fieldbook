@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/widgets/empty_state.dart';
+import '../../settings/widgets/add_button_side.dart';
 import '../../settings/widgets/settings_button.dart';
 import '../cubit/decks_cubit.dart';
 import '../cubit/decks_state.dart';
@@ -44,6 +45,7 @@ class _DecksScreenState extends State<DecksScreen> with DecksActions {
           );
         },
       ),
+      floatingActionButtonLocation: context.addButtonLocation,
       floatingActionButton: FloatingActionButton(
         heroTag: 'decks-fab',
         tooltip: 'New deck',

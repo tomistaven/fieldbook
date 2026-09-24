@@ -24,6 +24,17 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () =>
                       context.read<SettingsCubit>().setTheme(option.mode),
                 ),
+              const _SectionHeader('Layout'),
+              SwitchListTile(
+                secondary: const Icon(Icons.swap_horiz),
+                title: const Text('Add buttons on the left'),
+                subtitle: const Text(
+                  'Moves the add button on Todos, Shopping, Notes and Cards '
+                  'to the left side',
+                ),
+                value: state.addButtonsOnLeft,
+                onChanged: context.read<SettingsCubit>().setAddButtonsOnLeft,
+              ),
             ],
           );
         },
