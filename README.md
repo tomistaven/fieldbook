@@ -74,6 +74,7 @@ For the architecture, database, timer, encryption, and study-session internals i
 | Phase alert | A banner at the top of whichever tab is open, with **Open** and **Dismiss** |
 | System notification | Arrives when a phase ends while the app is in the background or closed; tapping it opens Focus |
 | Daily count | Focus sessions completed today |
+| Resets | Reset today's count or start the cycle over, from timer settings |
 
 ### Notes
 
@@ -190,7 +191,7 @@ Type in the **Add item** field at the bottom and press enter. The keyboard stays
 
 Tap the large button to start or pause. **Reset** returns the current phase to its full length, and **Skip** moves to the next phase without counting the current one. The dots above the ring show how many focus sessions remain before a long break.
 
-The tune icon opens timer settings: phase lengths, sessions per cycle, and whether the next phase starts automatically. When a phase ends, a banner appears at the top of whichever tab you're on. **Open** jumps to Focus.
+The tune icon opens timer settings: phase lengths, sessions per cycle, and whether the next phase starts automatically. Below **Save**, two rows show today's focus sessions and the sessions in the current cycle, each with a **Reset** button. Resetting the cycle clears the dots and returns the timer to the start of a focus session; today's count is kept. Both resets ask for confirmation and apply immediately, without **Save**. When a phase ends, a banner appears at the top of whichever tab you're on. **Open** jumps to Focus.
 
 The timer keeps running if you leave the app. When you come back, it shows the correct remaining time, or the next phase if the current one finished while you were away.
 

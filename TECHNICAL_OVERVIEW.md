@@ -191,7 +191,18 @@ The comparison is `>=` rather than `==`, so lowering `sessionsBeforeLongBreak` b
 
 ### Daily count
 
-`completedToday` is stored with the date it belongs to (`pomo.todayDate`). On launch, a stored date that isn't today resets the count to 0. On completion, the Cubit also checks whether the date changed since the last write, so a session that finishes after midnight starts the new day's count.
+`completedToday` is stored with the date it belongs to (`pomo.todayDate`). On launch, a stored date that isn't today resets the count to 0. On completion, the Cubit also checks whether the date changed since the last write, so a session that finishes after midnight starts the new day's count. `_rollOverDay()` runs the same check from `_onShow()` and on every tick, so a count left on screen past midnight clears when the app is reopened or a timer is running. An idle Focus screen kept in the foreground across midnight still shows the old count until one of those happens.
+
+### Manual resets
+
+The timer settings sheet has two reset rows below **Save**. Both go through `showConfirmDialog()` and call the Cubit immediately rather than being returned with the edited settings, because they change timer data, not settings.
+
+| Action | Cubit method | Effect |
+| --- | --- | --- |
+| Reset today's count | `resetToday()` | `completedToday` to 0, written with today's date; the cycle is untouched |
+| Reset cycle | `resetCycle()` | Cancels the ticker, clears `_endsAt`, and returns to an idle, full-length focus phase with `focusInCycle` 0; the daily count is untouched |
+
+The cycle row is disabled when `PomodoroState.atCycleStart` is true (idle, focus phase, no completed sessions), since a reset would change nothing. The sheet takes the whole `PomodoroState` so it can show both counts and that flag.
 
 ---
 
