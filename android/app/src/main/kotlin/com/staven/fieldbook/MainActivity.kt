@@ -1,0 +1,5 @@
+package com.staven.fieldbook
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
