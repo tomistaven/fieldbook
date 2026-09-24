@@ -106,7 +106,7 @@ GROUP BY d.id ORDER BY d.created_at DESC
 
 `EncryptionService` (`data/datasources/encryption_service.dart`) encrypts note titles and bodies with AES-256 using the `encrypt` package. The package's default mode is SIC (counter mode), and the service does not override it.
 
-- **Key:** 32 random bytes generated on first launch and stored in `flutter_secure_storage`, which uses the Android Keystore or the iOS Keychain.
+- **Key:** 32 random bytes generated on first launch and stored in `flutter_secure_storage`, which uses the Android Keystore.
 - **IV:** a fresh random 16-byte IV for every value, stored alongside the ciphertext as `<base64 IV>:<base64 ciphertext>`. The same note text therefore never produces the same ciphertext twice.
 - **Empty values** are stored as an empty string rather than encrypted, so an untitled note has no ciphertext to decrypt.
 - **Corrupted Keystore entries:** a Keystore entry can survive an uninstall and become unreadable on reinstall. `init()` catches the read failure, deletes the entry, and generates a new key. Notes encrypted under the old key can no longer be decrypted. `decryptText()` catches the failure and returns an empty string, so they show as empty rather than crashing the app.
@@ -191,7 +191,7 @@ The comparison is `>=` rather than `==`, so lowering `sessionsBeforeLongBreak` b
 
 ### Daily count
 
-`completedToday` is stored with the date it belongs to (`pomo.todayDate`). On launch, a stored date that isn't today resets the count to 0. On completion, the Cubit also checks whether the date changed since the last write, so a session that finishes after midnight starts the new day's count. `_rollOverDay()` runs the same check from `_onShow()` and on every tick, so a count left on screen past midnight clears when the app is reopened or a timer is running. An idle Focus screen kept in the foreground across midnight still shows the old count until one of those happens.
+`completedToday` is stored with the date it belongs to (`pomo.todayDate`). On launch, a stored date that isn't today resets the count to 0. On completion, the Cubit also checks whether the date changed since the last write, so a session that finishes after midnight starts the new day's count. `_rollOverDay()` runs the same check at local midnight, from a one-shot `Timer` that `_scheduleMidnight()` re-arms after each run, so a count left on screen clears on time. A backgrounded process can be frozen past midnight and miss that timer, so `_onShow()` also runs the check and re-arms the timer.
 
 ### Manual resets
 

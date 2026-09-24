@@ -31,7 +31,7 @@ A pocket organiser for everyday life: todos, a shopping list, a Pomodoro timer, 
 
 ## Project Overview
 
-Fieldbook is a Flutter app for Android and iOS that gathers five everyday tools behind a bottom navigation bar: **Todos**, **Shopping**, **Focus** (a Pomodoro timer), **Notes**, and **Cards** (flashcards). Everything is stored locally in an SQLite database. Notes are encrypted at rest. The app needs no account and no network connection.
+Fieldbook is a Flutter app for Android that gathers five everyday tools behind a bottom navigation bar: **Todos**, **Shopping**, **Focus** (a Pomodoro timer), **Notes**, and **Cards** (flashcards). Everything is stored locally in an SQLite database. Notes are encrypted at rest. The app needs no account and no network connection.
 
 Fieldbook started as a job-tracker coursework project (kood/Jõhvi mobile Task 1) and was rebuilt from scratch after graduation as a personal productivity app.
 
@@ -117,7 +117,6 @@ For the architecture, database, timer, encryption, and study-session internals i
 | Sync | A small backend (Go) or a hosted service |
 | Spaced repetition by date | Schedule reviews by Leitner box instead of studying the whole deck each session |
 | Authenticated encryption | Move notes to AES-GCM; the `encrypt` package is archived, see the Technical Overview |
-| New launcher icon | The current icon is still the job-tracker one |
 
 ---
 
@@ -131,7 +130,7 @@ For the architecture, database, timer, encryption, and study-session internals i
 | `drift` | Type-safe SQLite access with reactive `watch()` streams |
 | `path` / `path_provider` | Resolve the documents directory for the database file |
 | `encrypt` | AES encryption of note titles and bodies |
-| `flutter_secure_storage` | Stores the encryption key in the Android Keystore / iOS Keychain |
+| `flutter_secure_storage` | Stores the encryption key in the Android Keystore |
 | `shared_preferences` | Persists the theme mode, Pomodoro settings, and running-timer state |
 | `flutter_local_notifications` | Schedules the Pomodoro phase-end notification |
 | `timezone` | Provides the `TZDateTime` that `flutter_local_notifications` schedules with |
@@ -217,7 +216,7 @@ Open Settings from the gear icon to choose between system, light, and dark theme
 
 ### Rebuilt rather than repurposed
 
-Fieldbook began as a job-tracker coursework app. Rather than bending that code into a different product, it was started as a new Flutter project and a new repository, with the app source written fresh. The native Android and iOS folders came clean from `flutter create` with the right package ID, and the history starts at the new app instead of carrying the coursework review phases.
+Fieldbook began as a job-tracker coursework app. Rather than bending that code into a different product, it was started as a new Flutter project and a new repository, with the app source written fresh. The native Android folder came clean from `flutter create` with the right package ID, and the history starts at the new app instead of carrying the coursework review phases.
 
 ### Bottom navigation, not a floating hub
 

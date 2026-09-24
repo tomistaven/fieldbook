@@ -2,8 +2,8 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// AES-256 in the encrypt package's default SIC (counter) mode, with a
-/// random IV per value. The key lives in platform secure storage (Android
-/// Keystore / iOS Keychain).
+/// random IV per value. The key lives in the Android Keystore via
+/// flutter_secure_storage.
 class EncryptionService {
   static const String _keyStorageKey = 'encryption_key';
   final _secureStorage = const FlutterSecureStorage();

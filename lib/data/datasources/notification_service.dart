@@ -39,16 +39,9 @@ class NotificationService implements PhaseNotifier {
   );
 
   Future<void> init() async {
-    // Darwin permission flags are off so iOS does not prompt at launch; the
-    // prompt is shown on the first timer start instead.
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('ic_notification'),
-        iOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        ),
       ),
       // Tap while the process is alive. A tap that starts the process does
       // not reach this callback; it is read from the launch details below.
@@ -62,15 +55,7 @@ class NotificationService implements PhaseNotifier {
   Future<bool> requestPermission() async {
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
-    if (android != null) {
-      return await android.requestNotificationsPermission() ?? false;
-    }
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        IOSFlutterLocalNotificationsPlugin>();
-    if (ios != null) {
-      return await ios.requestPermissions(alert: true, sound: true) ?? false;
-    }
-    return false;
+    return await android?.requestNotificationsPermission() ?? false;
   }
 
   @override
@@ -86,10 +71,7 @@ class NotificationService implements PhaseNotifier {
       title: '${finished.label} finished',
       body: 'Up next: ${next.label}',
       scheduledDate: tz.TZDateTime.from(at, tz.UTC),
-      notificationDetails: const NotificationDetails(
-        android: _androidDetails,
-        iOS: DarwinNotificationDetails(),
-      ),
+      notificationDetails: const NotificationDetails(android: _androidDetails),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }

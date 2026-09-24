@@ -19,6 +19,7 @@ import 'pomodoro_state.dart';
 class PomodoroCubit extends Cubit<PomodoroState> {
   PomodoroCubit(this._prefs, this._notifier) : super(_restore(_prefs)) {
     _lifecycle = AppLifecycleListener(onHide: _onHide, onShow: _onShow);
+    _scheduleMidnight();
     // Created at launch, so the app is visible: any alert still pending or
     // shown from a previous session is stale.
     unawaited(_notifier.cancelPhaseEnd());
@@ -37,6 +38,7 @@ class PomodoroCubit extends Cubit<PomodoroState> {
   final PhaseNotifier _notifier;
   late final AppLifecycleListener _lifecycle;
   Timer? _ticker;
+  Timer? _midnight;
   DateTime? _endsAt;
   bool _hidden = false;
 
@@ -204,7 +206,10 @@ class PomodoroCubit extends Cubit<PomodoroState> {
 
   void _onShow() {
     _hidden = false;
+    // A backgrounded process may be frozen past midnight, so the timer
+    // below cannot be relied on to have fired.
     _rollOverDay();
+    _scheduleMidnight();
     // Also clears a delivered alert from the tray; the ticker completes the
     // phase and the in-app banner takes over.
     unawaited(_notifier.cancelPhaseEnd());
@@ -240,6 +245,19 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     _ticker = Timer.periodic(AppConstants.timerTick, (_) => _tick());
   }
 
+  /// Clears the daily count at the next local midnight while the app is open.
+  /// DateTime normalises day + 1 across month and year ends, and building it
+  /// from date parts keeps it at local midnight across DST changes.
+  void _scheduleMidnight() {
+    _midnight?.cancel();
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1);
+    _midnight = Timer(next.difference(now), () {
+      _rollOverDay();
+      _scheduleMidnight();
+    });
+  }
+
   /// The count is otherwise only re-dated at launch and on completion, so
   /// an app left open past midnight would keep showing yesterday's count.
   void _rollOverDay() {
@@ -250,7 +268,6 @@ class PomodoroCubit extends Cubit<PomodoroState> {
   }
 
   void _tick() {
-    _rollOverDay();
     final endsAt = _endsAt;
     if (endsAt == null) return;
     final left = endsAt.difference(DateTime.now());
@@ -318,6 +335,7 @@ class PomodoroCubit extends Cubit<PomodoroState> {
   @override
   Future<void> close() {
     _ticker?.cancel();
+    _midnight?.cancel();
     _lifecycle.dispose();
     return super.close();
   }
