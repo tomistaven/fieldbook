@@ -13,7 +13,7 @@ dependencies:
 
   # State management and dependency injection
   flutter_bloc: ^9.1.1
-  equatable: ^2.0.8
+  equatable: ^3.0.0
   get_it: ^9.2.1
 
   # Database
@@ -23,7 +23,7 @@ dependencies:
 
   # Security (notes are encrypted at rest)
   encrypt: ^5.0.3
-  flutter_secure_storage: ^9.0.0
+  flutter_secure_storage: ^11.2.0
 
   # Preferences (theme, Pomodoro settings and timer state)
   shared_preferences: ^2.5.5
