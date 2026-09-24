@@ -14,25 +14,37 @@ import 'pomodoro_state.dart';
 /// while the app is backgrounded. Timer state is persisted so a killed
 /// process resumes where it was.
 ///
-/// A system notification is scheduled only while the app is hidden; in the
+/// System notifications are scheduled only while the app is hidden; in the
 /// foreground the shell's phase banner covers the alert.
+///
+/// With auto-start, phases chain from the previous end time (see
+/// [phaseEnds]). While nobody is watching (app hidden or closed) the chain
+/// stops at the end of the next long break.
 class PomodoroCubit extends Cubit<PomodoroState> {
   PomodoroCubit(this._prefs, this._notifier) : super(_restore(_prefs)) {
     _lifecycle = AppLifecycleListener(onHide: _onHide, onShow: _onShow);
     _scheduleMidnight();
     // Created at launch, so the app is visible: any alert still pending or
     // shown from a previous session is stale.
-    unawaited(_notifier.cancelPhaseEnd());
+    unawaited(_notifier.cancelPhaseEnds());
     _endsAt = _readEndsAt(_prefs);
     if (state.status == TimerStatus.running) {
-      if (_endsAt == null || !_endsAt!.isAfter(DateTime.now())) {
-        // Phase ended while the app was not running.
-        _complete(silent: true);
-      } else {
+      // A missing end time means inconsistent stored state; treat the phase
+      // as ended.
+      final endsAt = _endsAt ??= DateTime.now();
+      if (endsAt.isAfter(DateTime.now())) {
         _startTicker();
+      } else {
+        // Ended while the process was dead. Silent: the shell is not
+        // listening yet, and a banner at launch would be stale anyway.
+        _advance(unattended: true, silent: true);
       }
     }
   }
+
+  /// A completion processed within this window of its end time is live and
+  /// gets haptics; anything later is a catch-up.
+  static const _liveWindow = Duration(seconds: 1);
 
   final SharedPreferences _prefs;
   final PhaseNotifier _notifier;
@@ -117,9 +129,6 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     _startTicker();
     _persistTimer();
     unawaited(_askNotificationPermissionOnce());
-    // Reached while hidden only through auto-start, when the Dart isolate
-    // is still alive after the previous phase ended in the background.
-    if (_hidden) _schedulePhaseEnd();
   }
 
   void pause() {
@@ -201,34 +210,39 @@ class PomodoroCubit extends Cubit<PomodoroState> {
 
   void _onHide() {
     _hidden = true;
-    _schedulePhaseEnd();
+    _schedulePhaseEnds();
   }
 
   void _onShow() {
+    // Settle phases that ended while hidden before clearing _hidden, so they
+    // get the same cap as the notifications that announced them.
+    final endsAt = _endsAt;
+    if (endsAt != null && !endsAt.isAfter(DateTime.now())) {
+      _advance(unattended: true);
+    }
     _hidden = false;
     // A backgrounded process may be frozen past midnight, so the timer
     // below cannot be relied on to have fired.
     _rollOverDay();
     _scheduleMidnight();
-    // Also clears a delivered alert from the tray; the ticker completes the
-    // phase and the in-app banner takes over.
-    unawaited(_notifier.cancelPhaseEnd());
+    // Also clears delivered alerts from the tray; the in-app banner has
+    // taken over.
+    unawaited(_notifier.cancelPhaseEnds());
   }
 
-  void _schedulePhaseEnd() {
+  /// One notification per phase end until the chain stops, which is the
+  /// same point [_advance] stops at for unattended time.
+  void _schedulePhaseEnds() {
     final endsAt = _endsAt;
     if (state.status != TimerStatus.running || endsAt == null) return;
-    final next = nextPhase(
+    final ends = phaseEnds(
       current: state.phase,
       focusInCycle: state.focusInCycle,
       settings: state.settings,
-      completed: true,
-    ).next;
-    unawaited(_notifier.schedulePhaseEnd(
-      at: endsAt,
-      finished: state.phase,
-      next: next,
-    ));
+      endsAt: endsAt,
+      stopAfterLongBreak: true,
+    ).toList();
+    unawaited(_notifier.schedulePhaseEnds(ends));
   }
 
   /// Prompts on the first start rather than at launch, so the request has
@@ -272,51 +286,77 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     if (endsAt == null) return;
     final left = endsAt.difference(DateTime.now());
     if (left <= Duration.zero) {
-      _complete();
+      _advance(unattended: _hidden);
     } else if (left.inSeconds != state.remaining.inSeconds) {
       emit(state.copyWith(remaining: left));
     }
   }
 
-  /// [silent] skips haptics and auto-start (used when restoring a phase that
-  /// ended while the app was closed).
-  void _complete({bool silent = false}) {
-    _ticker?.cancel();
-    _endsAt = null;
+  static bool _isToday(DateTime t) {
+    final n = DateTime.now();
+    return t.year == n.year && t.month == n.month && t.day == n.day;
+  }
 
-    final finished = state.phase;
-    final t = nextPhase(
-      current: finished,
+  /// Completes every phase whose end has passed. With auto-start, the next
+  /// phase is timed from the previous end, so phases that ended while the
+  /// app was frozen or closed keep their schedule, and the timer is left
+  /// running if the latest phase is still in progress.
+  ///
+  /// [unattended] stops the chain after the next long break. [silent]
+  /// suppresses the banner signal.
+  void _advance({required bool unattended, bool silent = false}) {
+    final endsAt = _endsAt;
+    if (endsAt == null) return;
+    final now = DateTime.now();
+
+    PhaseEnd? last;
+    DateTime? runningUntil;
+    var focusToday = 0;
+    for (final end in phaseEnds(
+      current: state.phase,
       focusInCycle: state.focusInCycle,
       settings: state.settings,
-      completed: true,
-    );
+      endsAt: endsAt,
+      stopAfterLongBreak: unattended,
+    )) {
+      if (end.at.isAfter(now)) {
+        runningUntil = end.at;
+        break;
+      }
+      last = end;
+      // Sessions that ended on an earlier day belong to that day's count.
+      if (end.finished == PomodoroPhase.focus && _isToday(end.at)) {
+        focusToday++;
+      }
+      if (!end.continues) break;
+    }
+    if (last == null) return;
+
+    _ticker?.cancel();
+    _endsAt = runningUntil;
 
     final sameDay = _prefs.getString(_kTodayDate) == _todayKey();
-    final todayBase = sameDay ? state.completedToday : 0;
-    final today =
-        finished == PomodoroPhase.focus ? todayBase + 1 : todayBase;
+    final today = (sameDay ? state.completedToday : 0) + focusToday;
 
     emit(state.copyWith(
-      phase: t.next,
-      focusInCycle: t.focusInCycle,
-      status: TimerStatus.idle,
-      remaining: state.settings.durationOf(t.next),
+      phase: last.next,
+      focusInCycle: last.focusInCycle,
+      status: runningUntil != null ? TimerStatus.running : TimerStatus.idle,
+      remaining: runningUntil != null
+          ? runningUntil.difference(now)
+          : state.settings.durationOf(last.next),
       completedToday: today,
       completedSignal: silent ? null : state.completedSignal + 1,
-      lastCompleted: finished,
+      lastCompleted: last.finished,
     ));
 
     _prefs.setString(_kTodayDate, _todayKey());
     _prefs.setInt(_kTodayCount, today);
 
-    if (!silent) {
+    if (!silent && now.difference(last.at) < _liveWindow) {
       HapticFeedback.heavyImpact();
-      if (state.settings.autoStartNext) {
-        start();
-        return;
-      }
     }
+    if (runningUntil != null) _startTicker();
     _persistTimer();
   }
 

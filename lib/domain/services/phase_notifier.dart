@@ -9,20 +9,16 @@ abstract interface class PhaseNotifier {
   /// was granted.
   Future<bool> requestPermission();
 
-  /// Schedules a single alert at [at]. Replaces any alert already scheduled.
-  /// Does nothing if [at] is not in the future.
-  Future<void> schedulePhaseEnd({
-    required DateTime at,
-    required PomodoroPhase finished,
-    required PomodoroPhase next,
-  });
+  /// Schedules one alert per entry, replacing any already scheduled.
+  /// Entries that are not in the future are skipped.
+  Future<void> schedulePhaseEnds(List<PhaseEnd> ends);
 
-  /// Cancels the scheduled alert and removes it from the tray if shown.
-  Future<void> cancelPhaseEnd();
+  /// Cancels all scheduled alerts and removes delivered ones from the tray.
+  Future<void> cancelPhaseEnds();
 
-  /// Whether the app process was started by tapping the alert.
+  /// Whether the app process was started by tapping an alert.
   bool get launchedFromAlert;
 
-  /// Emits when the alert is tapped while the app process is still alive.
+  /// Emits when an alert is tapped while the app process is still alive.
   Stream<void> get alertOpened;
 }

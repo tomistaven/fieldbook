@@ -94,3 +94,68 @@ PhaseTransition nextPhase({
       return const PhaseTransition(PomodoroPhase.focus, 0);
   }
 }
+
+/// One phase finishing, as produced by [phaseEnds].
+class PhaseEnd {
+  const PhaseEnd({
+    required this.at,
+    required this.finished,
+    required this.next,
+    required this.focusInCycle,
+    required this.continues,
+  });
+
+  final DateTime at;
+  final PomodoroPhase finished;
+
+  /// The phase that follows [finished].
+  final PomodoroPhase next;
+
+  /// Cycle count after [finished].
+  final int focusInCycle;
+
+  /// Whether [next] starts automatically, timed from [at].
+  final bool continues;
+}
+
+/// The phase ends that follow a running phase due at [endsAt].
+///
+/// Without auto-start only the current phase ends. With it, each next phase
+/// is timed from the previous end rather than from when it is processed, so
+/// the chain keeps its schedule however late the app catches up.
+///
+/// [stopAfterLongBreak] bounds a chain nobody is watching: it runs to the
+/// end of the next long break and no further. Without it the chain is
+/// unbounded under auto-start, so callers must stop iterating.
+Iterable<PhaseEnd> phaseEnds({
+  required PomodoroPhase current,
+  required int focusInCycle,
+  required PomodoroSettings settings,
+  required DateTime endsAt,
+  required bool stopAfterLongBreak,
+}) sync* {
+  var phase = current;
+  var cycle = focusInCycle;
+  var at = endsAt;
+  while (true) {
+    final t = nextPhase(
+      current: phase,
+      focusInCycle: cycle,
+      settings: settings,
+      completed: true,
+    );
+    final continues = settings.autoStartNext &&
+        !(stopAfterLongBreak && phase == PomodoroPhase.longBreak);
+    yield PhaseEnd(
+      at: at,
+      finished: phase,
+      next: t.next,
+      focusInCycle: t.focusInCycle,
+      continues: continues,
+    );
+    if (!continues) return;
+    phase = t.next;
+    cycle = t.focusInCycle;
+    at = at.add(settings.durationOf(t.next));
+  }
+}

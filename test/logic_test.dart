@@ -45,6 +45,72 @@ void main() {
     });
   });
 
+  group('Pomodoro phaseEnds', () {
+    final start = DateTime(2026, 9, 25, 9);
+    const auto = PomodoroSettings(
+      focusMinutes: 25,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 15,
+      sessionsBeforeLongBreak: 2,
+      autoStartNext: true,
+    );
+
+    List<PhaseEnd> ends(
+      PomodoroSettings settings, {
+      PomodoroPhase current = PomodoroPhase.focus,
+      int focusInCycle = 0,
+      bool unattended = true,
+      int take = 20,
+    }) =>
+        phaseEnds(
+          current: current,
+          focusInCycle: focusInCycle,
+          settings: settings,
+          endsAt: start,
+          stopAfterLongBreak: unattended,
+        ).take(take).toList();
+
+    test('without auto-start only the current phase ends', () {
+      final e = ends(const PomodoroSettings(sessionsBeforeLongBreak: 2));
+      expect(e, hasLength(1));
+      expect(e.single.next, PomodoroPhase.shortBreak);
+      expect(e.single.continues, isFalse);
+    });
+
+    test('unattended chain runs to the end of the next long break', () {
+      final e = ends(auto);
+      expect(e.map((x) => x.finished), [
+        PomodoroPhase.focus,
+        PomodoroPhase.shortBreak,
+        PomodoroPhase.focus,
+        PomodoroPhase.longBreak,
+      ]);
+      expect(e.last.next, PomodoroPhase.focus);
+      expect(e.last.focusInCycle, 0);
+      expect(e.last.continues, isFalse);
+    });
+
+    test('each end is timed from the previous end', () {
+      final e = ends(auto);
+      expect(e[0].at, start);
+      expect(e[1].at, start.add(const Duration(minutes: 5)));
+      expect(e[2].at, start.add(const Duration(minutes: 30)));
+      expect(e[3].at, start.add(const Duration(minutes: 45)));
+    });
+
+    test('starting in a long break stops after it', () {
+      final e = ends(auto, current: PomodoroPhase.longBreak, focusInCycle: 2);
+      expect(e, hasLength(1));
+      expect(e.single.continues, isFalse);
+    });
+
+    test('attended chain does not stop at the long break', () {
+      final e = ends(auto, unattended: false);
+      expect(e, hasLength(20));
+      expect(e.every((x) => x.continues), isTrue);
+    });
+  });
+
   group('Leitner', () {
     test('correct answer moves up one box, capped at max', () {
       expect(Leitner.next(1, knew: true), 2);

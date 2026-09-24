@@ -25,10 +25,6 @@ class NotificationService implements PhaseNotifier {
   @override
   Stream<void> get alertOpened => _alertOpened.stream;
 
-  /// A single id: only one phase can be pending at a time, and reusing the id
-  /// makes a new schedule replace the previous one.
-  static const int _phaseEndId = 1;
-
   static const AndroidNotificationDetails _androidDetails =
       AndroidNotificationDetails(
     'pomodoro_phase_end',
@@ -58,24 +54,32 @@ class NotificationService implements PhaseNotifier {
     return await android?.requestNotificationsPermission() ?? false;
   }
 
+  /// Ids are the entry's position plus one. The app posts no other
+  /// notifications, so clearing everything first is safe.
   @override
-  Future<void> schedulePhaseEnd({
-    required DateTime at,
-    required PomodoroPhase finished,
-    required PomodoroPhase next,
-  }) async {
-    // zonedSchedule throws for a date in the past.
-    if (!at.isAfter(DateTime.now())) return;
-    await _plugin.zonedSchedule(
-      id: _phaseEndId,
-      title: '${finished.label} finished',
-      body: 'Up next: ${next.label}',
-      scheduledDate: tz.TZDateTime.from(at, tz.UTC),
+  Future<void> schedulePhaseEnds(List<PhaseEnd> ends) async {
+    await _plugin.cancelAll();
+    final now = DateTime.now();
+    for (final (i, end) in ends.indexed) {
+      // zonedSchedule throws for a date in the past.
+      if (!end.at.isAfter(now)) continue;
+      await _schedule(id: i + 1, end: end);
+    }
+  }
+
+  Future<void> _schedule({required int id, required PhaseEnd end}) {
+    return _plugin.zonedSchedule(
+      id: id,
+      title: '${end.finished.label} finished',
+      body: end.continues
+          ? '${end.next.label} has started'
+          : 'Up next: ${end.next.label}',
+      scheduledDate: tz.TZDateTime.from(end.at, tz.UTC),
       notificationDetails: const NotificationDetails(android: _androidDetails),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
 
   @override
-  Future<void> cancelPhaseEnd() => _plugin.cancel(id: _phaseEndId);
+  Future<void> cancelPhaseEnds() => _plugin.cancelAll();
 }
