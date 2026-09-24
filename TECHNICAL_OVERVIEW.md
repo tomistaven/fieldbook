@@ -17,6 +17,7 @@ This document covers the architecture, the database and its reactive streams, no
 - [Flashcards and the Leitner System](#flashcards-and-the-leitner-system)
 - [App Shell, Messengers, and the Phase Alert](#app-shell-messengers-and-the-phase-alert)
 - [Dialogs and Controller Lifetime](#dialogs-and-controller-lifetime)
+- [Settings](#settings)
 - [Dependency Injection](#dependency-injection)
 - [Key Constants](#key-constants)
 - [Back to README.md](README.md)
@@ -27,7 +28,7 @@ This document covers the architecture, the database and its reactive streams, no
 
 The project uses Flutter Clean Architecture with three layers plus a shared core.
 
-**Domain layer** (`lib/domain/`) defines the entities (`Todo`, `ShoppingItem`, `Note`, `Deck`, `Flashcard`, `PomodoroSettings`), the abstract repository interfaces, and the `PhaseNotifier` service interface. It also holds the two pieces of pure logic: `nextPhase()` for Pomodoro phase transitions and `Leitner.next()` for flashcard boxes. There are no Flutter imports and no external packages beyond `equatable`, which keeps both pieces of logic unit-testable without a widget tree or a database.
+**Domain layer** (`lib/domain/`) defines the entities (`Todo`, `ShoppingItem`, `Note`, `Deck`, `Flashcard`, `PomodoroSettings`), the abstract repository interfaces, and the `PhaseNotifier` service interface. It also holds the pure logic: `nextPhase()` and `phaseEnds()` for Pomodoro phase transitions and `Leitner.next()` for flashcard boxes. There are no Flutter imports and no external packages beyond `equatable`, which keeps both pieces of logic unit-testable without a widget tree or a database.
 
 **Data layer** (`lib/data/`) implements the repositories over Drift. `datasources/` holds the database definition, `EncryptionService`, and `NotificationService`. `models/` maps Drift row classes to domain entities, and `repositories/` holds the `*RepositoryImpl` classes. The data layer knows about Drift, SQLite, secure storage, and the notification plugin, but not about widgets.
 
@@ -42,6 +43,8 @@ A note on layer placement: Pomodoro phase colours live in a presentation-side ex
 `AppTheme` sets `fontFamily: 'Inter'` on `ThemeData`, which Flutter applies to every slot in the text theme. The one place that needs the family set explicitly is `AppBarTheme.titleTextStyle`. `AppBar` does not merge that style with the text theme, so without an explicit family the titles would fall back to the platform font. The same applies to `NavigationBarThemeData.labelTextStyle`.
 
 Light and dark themes are built by one `_build()` method that takes the palette as parameters, so the two themes cannot drift apart structurally. Neutrals follow Tailwind's gray scale. The dark background is `#121212` rather than pure black, and surfaces step up to `#1E1E1E` so cards separate from the background.
+
+The `ColorScheme` sets `inverseSurface`, `onInverseSurface`, and `inversePrimary` explicitly. Snackbars draw on the inverse surface and colour their action with `inversePrimary`, which otherwise falls back to `onPrimary` (white). In dark mode the inverse surface is light gray-100, so the Undo action was nearly invisible. Light mode uses `accent` (7.0:1 on gray-900) and dark mode uses `accentOnLight`, emerald-700 (5.0:1 on gray-100); both meet WCAG AA for normal text.
 
 ---
 
@@ -154,7 +157,7 @@ Items are watched oldest-first, and `ShoppingState` splits them into `toBuy` and
 _endsAt = DateTime.now().add(state.remaining);
 ```
 
-A `Timer.periodic` every 250 ms (`AppConstants.timerTick`) recomputes `remaining = _endsAt - now`. It emits only when the displayed whole second changes, and `PomodoroState` includes `remaining.inSeconds` in its Equatable props so that sub-second changes don't trigger rebuilds. When `remaining` reaches zero, `_complete()` advances the phase.
+A `Timer.periodic` every 250 ms (`AppConstants.timerTick`) recomputes `remaining = _endsAt - now`. It emits only when the displayed whole second changes, and `PomodoroState` includes `remaining.inSeconds` in its Equatable props so that sub-second changes don't trigger rebuilds. When `remaining` reaches zero, `_advance()` settles the phase (see Chaining with auto-start).
 
 Counting ticks would drift, because timer callbacks are not guaranteed to fire on schedule. It would also freeze while the OS suspends the app. Deriving from the clock makes both problems disappear: after a resume, the first tick shows the correct value.
 
@@ -174,7 +177,7 @@ Timer state is written to shared preferences on every start, pause, reset, skip,
 | `pomo.focusMinutes` … `pomo.autoStartNext` | User settings |
 | `pomo.notificationPermissionAsked` | Whether the notification permission prompt has been shown |
 
-The constructor restores this state synchronously; `SharedPreferences` is already loaded by `initDependencies()`. If the restored status is running and the end time has passed, the phase ended while the app was closed. `_complete(silent: true)` then advances it without haptics, without the alert banner, and without auto-starting the next phase. Auto-starting from a stale end time would start the next phase at the wrong moment.
+The constructor restores this state synchronously; `SharedPreferences` is already loaded by `initDependencies()`. If the restored status is running and the end time has passed, the phase ended while the app was closed. `_advance(unattended: true, silent: true)` then catches up without haptics and without the alert banner. With auto-start on, it chains from the stored end time rather than from launch, so the timer lands in whichever phase is running now, capped at the end of the next long break.
 
 `main()` resolves the Cubit (`sl<PomodoroCubit>()`) before `runApp()`. The restore therefore happens at launch rather than when the Focus tab is first built.
 
@@ -187,7 +190,23 @@ The constructor restores this state synchronously; `SharedPreferences` is alread
 - **Short break** leads to focus, and the count is kept.
 - **Long break** leads to focus, and the count resets to 0.
 
-The comparison is `>=` rather than `==`, so lowering `sessionsBeforeLongBreak` below the current count mid-cycle triggers a long break instead of never matching. This function is what `test/logic_test.dart` covers.
+The comparison is `>=` rather than `==`, so lowering `sessionsBeforeLongBreak` below the current count mid-cycle triggers a long break instead of never matching. This function and `phaseEnds()` are what `test/logic_test.dart` covers.
+
+### Chaining with auto-start
+
+`phaseEnds()` (`domain/entities/pomodoro.dart`) is a `sync*` generator that yields a `PhaseEnd` for each phase finishing from a given end time: when it ends, what finished, what comes next, the cycle count after it, and whether the next phase starts automatically. Each next phase is timed from the previous end, not from when the app processes it, so a chain keeps its schedule however late the app catches up.
+
+`stopAfterLongBreak` bounds a chain nobody is watching: it ends after the next long break. Without it the generator is unbounded under auto-start, and callers stop at the first end still in the future.
+
+`_advance()` walks `phaseEnds()`, completes every end that has passed, and leaves the timer running on the next end if one is still ahead, or idle at the next phase otherwise.
+
+| Caller | `unattended` | Notes |
+| --- | --- | --- |
+| `_tick()` | `_hidden` | Live completion; haptics only within `_liveWindow` (1 s) of the end |
+| `_onShow()` | true | Settles phases that ended while hidden before clearing `_hidden`, so they get the same cap as the notifications that announced them; one banner, no haptic |
+| Constructor | true, `silent` | Process was dead; no banner, since the shell is not listening yet |
+
+A focus session counts toward `completedToday` only if it ended today, so a catch-up across midnight does not credit yesterday's sessions to today.
 
 ### Daily count
 
@@ -216,14 +235,13 @@ The in-app banner covers a phase that ends while the app is visible. `Notificati
 
 | Event | Action |
 | --- | --- |
-| `onHide` | If the timer is running, schedule one notification at `_endsAt` |
-| `onShow` | Cancel it; this also removes a delivered notification from the tray |
+| `onHide` | If the timer is running, schedule one notification per entry of `phaseEnds(stopAfterLongBreak: true)` |
+| `onShow` | Settle passed phases, then cancel all; this also removes delivered notifications from the tray |
 | Constructor | Cancel any leftover from a previous session; the app is visible at launch |
-| `start()` while hidden | Schedule for the new phase; reached only through auto-start when the isolate is still alive |
 
-Scheduling only while hidden means the notification and the banner never fire for the same phase, and nothing has to race `_complete()` to cancel a notification in the foreground. Because the timer already derives from an absolute end time, the notification is a single alarm registered with Android. No background isolate or foreground service runs, and the alarm fires even after the process has been killed.
+Scheduling only while hidden means the notifications and the banner never fire for the same phase, and nothing has to race a foreground completion to cancel a notification. Because the timer already derives from absolute end times, each notification is an alarm registered with Android. No background isolate or foreground service runs, and the alarms fire even after the process has been killed. The notifications and `_advance()` use the same `phaseEnds()` chain with the same cap, so what the user was notified about is what the timer shows on return.
 
-The notification title and body come from the current phase and `nextPhase(completed: true)`, so a focus session announces the correct short or long break. All notifications share one id (`_phaseEndId`), so a new schedule replaces the previous one.
+Each notification's title names the finished phase. The body reads "… has started" when the next phase auto-starts and "Up next: …" when it does not. Ids are the entry's position plus one. The app posts no other notifications, so `schedulePhaseEnds()` clears everything with `cancelAll()` before scheduling, and `cancelPhaseEnds()` is `cancelAll()` too.
 
 ### UTC instead of the device time zone
 
@@ -350,6 +368,23 @@ Each of these dialogs is now a private `StatefulWidget` (`_TextPromptDialog`, `_
 
 ---
 
+## Settings
+
+`SettingsCubit` (`presentation/settings/cubit/`) holds app-wide preferences in `SharedPreferences`:
+
+| Key | Setting |
+| --- | --- |
+| `theme_mode` | System, light, or dark |
+| `add_buttons_on_left` | Add buttons on the left instead of the right |
+
+### Add-button side
+
+The `AddButtonSide` extension on `BuildContext` (`presentation/settings/widgets/add_button_side.dart`) exposes `addButtonsOnLeft`, read with `context.select`, so a screen rebuilds only when this one setting changes, and `addButtonLocation`, which maps it to `FloatingActionButtonLocation.startFloat` or `endFloat`. Todos, Notes, the deck list, and the deck screen set their `floatingActionButtonLocation` from it. `QuickAddBar` takes the side as a `buttonOnLeft` parameter from the Shopping screen rather than reading Settings itself, so it stays a plain widget; it mirrors the button order and padding.
+
+`context.select` may only be called while that context's widget is building. `DeckScreen` builds its `Scaffold` inside a `BlocBuilder<DecksCubit>`, whose rebuilds (for example when a new card changes the deck's count) do not rebuild the screen's own element. The location is therefore read in `build()` and passed into `_buildDeck()`.
+
+---
+
 ## Dependency Injection
 
 All registrations are in `lib/injection_container.dart`, run in `main()` before `runApp()`.
@@ -361,7 +396,7 @@ All registrations are in `lib/injection_container.dart`, run in `main()` before 
 | `NotificationService` (as `PhaseNotifier`) | Eager singleton | Plugin must be initialised and the launch details read before the shell builds |
 | `AppDatabase` | Lazy singleton | One connection for the whole app |
 | `TodoRepository`, `ShoppingRepository`, `NoteRepository`, `FlashcardRepository` | Lazy singleton | One implementation each, registered against the abstract interface |
-| `SettingsCubit` | Lazy singleton | Drives `MaterialApp.themeMode`; shared with the Settings screen |
+| `SettingsCubit` | Lazy singleton | Drives `MaterialApp.themeMode` and the add-button side; shared with the Settings screen |
 | `TodoCubit`, `ShoppingCubit`, `NotesCubit`, `DecksCubit` | Lazy singleton | One per tab, alive for the session so tabs keep their state |
 | `PomodoroCubit` | Lazy singleton, resolved in `main()` | Restores a running timer at launch |
 
@@ -418,6 +453,7 @@ All registrations are in `lib/injection_container.dart`, run in `main()` before 
 | `background` / `darkBackground` | `#F9FAFB` / `#121212` | Scaffold background |
 | `surface` / `darkSurface` | `#FFFFFF` / `#1E1E1E` | Cards, sheets, dialogs, navigation bar |
 | `border` / `darkBorder` | `#E5E7EB` / `#2C2C2C` | Card outlines, input borders, dividers |
-| `accent` | `#10B981` | Primary colour, FABs, checked items |
+| `accent` | `#10B981` | Primary colour, FABs, checked items, snackbar action in light mode |
+| `accentOnLight` | `#047857` | Snackbar action in dark mode, on the light inverse surface |
 | `focus` / `shortBreak` / `longBreak` | `#E11D48` / `#10B981` / `#3B82F6` | Pomodoro phase colours |
 | `danger` | `#E11D48` | Overdue dates, swipe-to-delete background, destructive buttons |

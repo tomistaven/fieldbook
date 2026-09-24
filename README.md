@@ -73,6 +73,7 @@ For the architecture, database, timer, encryption, and study-session internals i
 | Survives restarts | A running timer keeps counting while the app is backgrounded or closed |
 | Phase alert | A banner at the top of whichever tab is open, with **Open** and **Dismiss** |
 | System notification | Arrives when a phase ends while the app is in the background or closed; tapping it opens Focus |
+| Auto-start while away | With auto-start on, phases keep their schedule while the app is in the background or closed, through the next long break |
 | Daily count | Focus sessions completed today |
 | Resets | Reset today's count or start the cycle over, from timer settings |
 
@@ -103,6 +104,7 @@ For the architecture, database, timer, encryption, and study-session internals i
 | Feature | Description |
 | --- | --- |
 | Themes | System, light, or dark, chosen in Settings |
+| Add-button side | Add buttons on the right (default) or the left, chosen in Settings for one-handed use |
 | Typography | Inter, bundled with the app |
 | Offline | No network access needed after installation |
 
@@ -196,6 +198,8 @@ The timer keeps running if you leave the app. When you come back, it shows the c
 
 If a phase ends while the app is in the background or closed, a system notification arrives instead of the banner. Tapping it opens Focus. The first time you start the timer, Android asks for permission to show notifications. If you decline, the timer works the same, just without the notification; the choice can be changed later in the system app settings.
 
+With auto-start on, the cycle keeps going while you're away: each phase starts when the previous one ends, and you get a notification at every phase change. While the app is in the background or closed, the chain stops at the end of the next long break, so a timer left running doesn't keep counting sessions. When you come back, the timer shows where the cycle is now.
+
 ### Using Notes
 
 Tap the pen button to write a note. It saves automatically while you type and when you leave the editor. A new note that you leave empty is not saved, and a note you empty out is deleted when you leave. Search matches titles and bodies. Long-press a note in the list to pin it to the top or delete it. In the editor, the copy icon puts the note on the clipboard.
@@ -208,7 +212,7 @@ Tap **Study** to start a session. Tap the card or **Show answer** to flip it, th
 
 ### Settings
 
-Open Settings from the gear icon to choose between system, light, and dark theme.
+Open Settings from the gear icon to choose between system, light, and dark theme. Under **Layout**, **Add buttons on the left** moves the add button on Todos, Shopping, Notes, and Cards to the left side of the screen.
 
 ---
 
@@ -232,7 +236,7 @@ Flutter's `Dismissible` asserts if a swiped widget is still in the tree on the n
 
 ### A timer that survives the app being closed
 
-A countdown that decrements a counter every tick drifts, and it stops entirely when Android suspends or kills the app. The Pomodoro timer instead stores an absolute end time and derives the remaining time from the clock. Timer state is persisted to shared preferences, so after a restart the timer resumes, or completes the phase that ended while the app was closed.
+A countdown that decrements a counter every tick drifts, and it stops entirely when Android suspends or kills the app. The Pomodoro timer instead stores an absolute end time and derives the remaining time from the clock. Timer state is persisted to shared preferences, so after a restart the timer resumes, or catches up on the phases that ended while the app was closed.
 
 ### A phase alert that reaches whichever tab is open
 
@@ -240,7 +244,7 @@ The first version showed a snackbar at the bottom of the screen, which was easy 
 
 ### A notification only while the app is hidden
 
-The in-app banner already covers a phase that ends while Fieldbook is open, so a system notification is only needed when it isn't. The Pomodoro Cubit listens to the app lifecycle: when the app is hidden with the timer running, it schedules one notification for the stored end time, and when the app is shown again, it cancels it. Because the timer already works from an absolute end time, no background process is needed. Android's alarm service delivers the notification even after the app has been swiped away. Exact alarms are used so Doze mode cannot delay the alert by minutes.
+The in-app banner already covers a phase that ends while Fieldbook is open, so a system notification is only needed when it isn't. The Pomodoro Cubit listens to the app lifecycle: when the app is hidden with the timer running, it schedules a notification for each upcoming phase end, and when the app is shown again, it cancels them. With auto-start off that is one notification. With it on, each next phase is timed from the previous end, and the chain stops at the end of the next long break, so notifications and the catch-up on return always agree and an unattended timer cannot count sessions indefinitely. Because the timer already works from an absolute end time, no background process is needed. Android's alarm service delivers the notification even after the app has been swiped away. Exact alarms are used so Doze mode cannot delay the alert by minutes.
 
 ### Dialogs own their text controllers
 
