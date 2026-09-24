@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
 /// Returns true only when the user explicitly confirms.
 Future<bool> showConfirmDialog(
   BuildContext context, {
@@ -19,9 +17,12 @@ Future<bool> showConfirmDialog(
           onPressed: () => Navigator.pop(context, false),
           child: const Text('Cancel'),
         ),
-        TextButton(
+        FilledButton(
           onPressed: () => Navigator.pop(context, true),
-          style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
           child: Text(confirmLabel),
         ),
       ],

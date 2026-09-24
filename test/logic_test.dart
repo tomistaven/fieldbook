@@ -1,7 +1,6 @@
+import 'package:fieldbook/domain/entities/flashcard.dart';
+import 'package:fieldbook/domain/entities/pomodoro.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:fieldbook/features/flashcards/flashcard_repository.dart';
-import 'package:fieldbook/features/pomodoro/pomodoro_settings.dart';
 
 void main() {
   group('Pomodoro nextPhase', () {

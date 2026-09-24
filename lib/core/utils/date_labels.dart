@@ -1,9 +1,7 @@
 import 'package:intl/intl.dart';
 
 /// Short, human-readable date labels relative to today.
-class DateLabels {
-  DateLabels._();
-
+abstract final class DateLabels {
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
   /// "Today", "Tomorrow", "Yesterday", "Mon 3 Nov" or "3 Nov 2027".

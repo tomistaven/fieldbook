@@ -12,48 +12,54 @@ Personal productivity app built with Flutter: todos, a shopping list, a Pomodoro
 | **Notes** | Autosaving editor, search, pin to top, copy to clipboard. Title and body are AES-256 encrypted at rest. |
 | **Cards** | Flashcard decks with a flip-card study mode. Leitner boxes (1–5): weakest cards come first, missed cards come back at the end of the session. Progress per deck. |
 
-Light / dark / system theme toggle in every tab.
+Light / dark / system theme in Settings (gear icon in every tab).
 
 ## Architecture
 
-Feature-first layout. Each feature owns its repository, cubit(s), screens and widgets.
+Layered like a small clean-architecture app: the domain layer has no Flutter or database dependencies, the data layer implements it with Drift, and the presentation layer is split per feature.
 
 ```
 lib/
-├── main.dart                  # Locale, encryption and prefs init
-├── app.dart                   # Providers, MaterialApp, bottom-nav shell
-├── core/
-│   ├── database/              # Drift schema (all tables) + generated code
-│   ├── security/              # AES encryption, key in secure storage
-│   ├── theme/                 # Colors, theme, ThemeCubit
-│   ├── utils/                 # Date labels
-│   └── widgets/               # Shared widgets and dialogs
-└── features/
+├── main.dart                  # Locale init, DI, root widget and providers
+├── injection_container.dart   # get_it registrations
+├── core/                      # Constants, theme, shared widgets, date labels
+├── domain/
+│   ├── entities/              # Todo, ShoppingItem, Note, Deck, Flashcard, Pomodoro logic
+│   └── repositories/          # Abstract repository contracts
+├── data/
+│   ├── datasources/           # Drift database, AES encryption service
+│   ├── models/                # Drift row <-> entity mappers
+│   └── repositories/          # Repository implementations
+└── presentation/
+    ├── shell/                 # Bottom navigation, Pomodoro alert banner
+    ├── settings/
     ├── todos/
     ├── shopping/
-    ├── pomodoro/
+    ├── focus/
     ├── notes/
-    └── flashcards/
+    └── flashcards/            # each: cubit/, screens/ (+ *_actions.dart), widgets/
 ```
 
-- **State:** flutter_bloc cubits. Repositories expose Drift `watch()` streams; cubits subscribe, so every write updates the UI without manual refreshes.
-- **Dependency wiring:** `RepositoryProvider` / `BlocProvider` above `MaterialApp` (no service locator).
-- **Persistence:** Drift over SQLite (`fieldbook.db`). Pomodoro settings and timer state in shared_preferences.
+- **State:** flutter_bloc cubits, each with its state in a separate `*_state.dart`. Repositories expose Drift `watch()` streams; cubits subscribe, so every write updates the UI without manual refreshes.
+- **Dependency injection:** get_it. App-scoped cubits are lazy singletons provided above `MaterialApp`; screen-scoped cubits (deck cards, study session) are created and closed by their screens.
+- **Screens and actions:** dialog, sheet and snackbar flows live in `*_actions.dart` mixins so screens stay focused on layout.
+- **Persistence:** Drift over SQLite (`fieldbook.db`). Theme, Pomodoro settings and timer state in shared_preferences.
 - **Encryption:** note title and body only; search runs on decrypted notes in memory.
 - **Pomodoro timing:** countdown is derived from an absolute end time, not from counting ticks, so it stays correct after the app is backgrounded or killed. Phase logic is a pure function (`nextPhase`) and unit-tested.
+- **Typography:** Inter, bundled in `assets/fonts` (SIL Open Font License).
 
 ## Setup
 
-Requires Flutter (developed on 3.41 stable).
+Requires Flutter stable. The Inter font files must be present in `assets/fonts` (see pubspec.yaml).
 
 ```bash
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs   # generates app_database.g.dart
+dart run build_runner build   # generates app_database.g.dart
 flutter test
 flutter run
 ```
 
-Re-run `build_runner` after changing any table in `lib/core/database/app_database.dart`. Bump `schemaVersion` and add a migration step once real data exists.
+Re-run `build_runner` after changing any table in `lib/data/datasources/app_database.dart`. Bump `schemaVersion` and add a migration step when the schema changes.
 
 Release APK:
 
