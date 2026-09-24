@@ -39,30 +39,66 @@ Future<String?> showTextPrompt(
   String hint = '',
   String confirmLabel = 'Save',
 }) async {
-  final controller = TextEditingController(text: initialValue);
   final result = await showDialog<String>(
     context: context,
-    builder: (context) {
-      void submit() => Navigator.pop(context, controller.text.trim());
-      return AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(hintText: hint),
-          onSubmitted: (_) => submit(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(onPressed: submit, child: Text(confirmLabel)),
-        ],
-      );
-    },
+    builder: (_) => _TextPromptDialog(
+      title: title,
+      initialValue: initialValue,
+      hint: hint,
+      confirmLabel: confirmLabel,
+    ),
   );
-  controller.dispose();
   return (result == null || result.isEmpty) ? null : result;
+}
+
+/// Owns its controller so it is disposed with the dialog, after the
+/// closing animation, not when showDialog's future completes.
+class _TextPromptDialog extends StatefulWidget {
+  const _TextPromptDialog({
+    required this.title,
+    required this.initialValue,
+    required this.hint,
+    required this.confirmLabel,
+  });
+
+  final String title;
+  final String? initialValue;
+  final String hint;
+  final String confirmLabel;
+
+  @override
+  State<_TextPromptDialog> createState() => _TextPromptDialogState();
+}
+
+class _TextPromptDialogState extends State<_TextPromptDialog> {
+  late final _controller = TextEditingController(text: widget.initialValue);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.pop(context, _controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: InputDecoration(hintText: widget.hint),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(onPressed: _submit, child: Text(widget.confirmLabel)),
+      ],
+    );
+  }
 }
