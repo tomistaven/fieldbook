@@ -176,15 +176,15 @@ The output APK is at `build/app/outputs/flutter-apk/app-release.apk`.
 
 The bottom bar switches between **Todos**, **Shopping**, **Focus**, **Notes**, and **Cards**. Each tab keeps its state when you switch away. The gear icon in every tab's top bar opens Settings.
 
-### Todos
+### Using Todos
 
 Tap **+** to add a todo: a title is required, while the note and due date are optional. Tap a todo to edit it, tap its circle to mark it done, and swipe it left to delete it. After a delete, **Undo** in the snackbar brings it back. The chips at the top filter between Active, Done, and All. **Clear completed** in the ⋮ menu deletes all done todos after asking.
 
-### Shopping
+### Using Shopping
 
 Type in the **Add item** field at the bottom and press enter. The keyboard stays open so you can add the next item straight away. Tap an item to check it off and move it into **In cart**, or tap it again to move it back. Long-press an item to change its name or add a quantity. Swipe left to delete, with Undo. The ⋮ menu has **Clear checked** and **Delete all**.
 
-### Focus
+### Using Focus
 
 Tap the large button to start or pause. **Reset** returns the current phase to its full length, and **Skip** moves to the next phase without counting the current one. The dots above the ring show how many focus sessions remain before a long break.
 
@@ -192,11 +192,11 @@ The tune icon opens timer settings: phase lengths, sessions per cycle, and wheth
 
 The timer keeps running if you leave the app. When you come back, it shows the correct remaining time, or the next phase if the current one finished while you were away.
 
-### Notes
+### Using Notes
 
 Tap the pen button to write a note. It saves automatically while you type and when you leave the editor. A new note that you leave empty is not saved, and a note you empty out is deleted when you leave. Search matches titles and bodies. Long-press a note in the list to pin it to the top or delete it. In the editor, the copy icon puts the note on the clipboard.
 
-### Flashcards
+### Using Flashcards
 
 Tap **+** to create a deck; it opens straight away. Tap **+** inside the deck to add cards. The sheet stays open after each card, so you can enter a whole set in one go. Tap a card to edit it, or swipe it left to delete it, with Undo. The bars on each card show its Leitner box.
 
