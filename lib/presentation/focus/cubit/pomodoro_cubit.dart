@@ -159,6 +159,14 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     _persistTimer();
   }
 
+  /// Zeroes today's completed-session count. The cycle count is left alone;
+  /// it tracks progress toward the next long break, not the day.
+  Future<void> resetToday() async {
+    emit(state.copyWith(completedToday: 0));
+    await _prefs.setString(_kTodayDate, _todayKey());
+    await _prefs.setInt(_kTodayCount, 0);
+  }
+
   Future<void> updateSettings(PomodoroSettings s) async {
     final idle = state.status == TimerStatus.idle;
     emit(state.copyWith(
@@ -181,6 +189,7 @@ class PomodoroCubit extends Cubit<PomodoroState> {
 
   void _onShow() {
     _hidden = false;
+    _rollOverDay();
     // Also clears a delivered alert from the tray; the ticker completes the
     // phase and the in-app banner takes over.
     unawaited(_notifier.cancelPhaseEnd());
@@ -216,7 +225,17 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     _ticker = Timer.periodic(AppConstants.timerTick, (_) => _tick());
   }
 
+  /// The count is otherwise only re-dated at launch and on completion, so
+  /// an app left open past midnight would keep showing yesterday's count.
+  void _rollOverDay() {
+    if (state.completedToday != 0 &&
+        _prefs.getString(_kTodayDate) != _todayKey()) {
+      emit(state.copyWith(completedToday: 0));
+    }
+  }
+
   void _tick() {
+    _rollOverDay();
     final endsAt = _endsAt;
     if (endsAt == null) return;
     final left = endsAt.difference(DateTime.now());

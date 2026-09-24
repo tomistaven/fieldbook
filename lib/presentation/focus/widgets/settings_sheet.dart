@@ -1,22 +1,39 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/dialogs.dart';
 import '../../../domain/entities/pomodoro.dart';
 
+/// Returns the edited settings on Save, or null if dismissed.
+///
+/// [onResetToday] runs immediately after confirmation, independent of Save,
+/// because the daily count is data rather than a setting.
 Future<PomodoroSettings?> showPomodoroSettings(
   BuildContext context,
-  PomodoroSettings current,
-) {
+  PomodoroSettings current, {
+  required int completedToday,
+  required Future<void> Function() onResetToday,
+}) {
   return showModalBottomSheet<PomodoroSettings>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => _SettingsSheet(initial: current),
+    builder: (_) => _SettingsSheet(
+      initial: current,
+      completedToday: completedToday,
+      onResetToday: onResetToday,
+    ),
   );
 }
 
 class _SettingsSheet extends StatefulWidget {
-  const _SettingsSheet({required this.initial});
+  const _SettingsSheet({
+    required this.initial,
+    required this.completedToday,
+    required this.onResetToday,
+  });
 
   final PomodoroSettings initial;
+  final int completedToday;
+  final Future<void> Function() onResetToday;
 
   @override
   State<_SettingsSheet> createState() => _SettingsSheetState();
@@ -24,6 +41,20 @@ class _SettingsSheet extends StatefulWidget {
 
 class _SettingsSheetState extends State<_SettingsSheet> {
   late PomodoroSettings _s = widget.initial;
+  late int _today = widget.completedToday;
+
+  Future<void> _confirmResetToday() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: "Reset today's count?",
+      message: "Today's focus sessions go back to 0. Timer settings and the "
+          'current cycle are not changed.',
+      confirmLabel: 'Reset',
+    );
+    if (!confirmed || !mounted) return;
+    await widget.onResetToday();
+    if (mounted) setState(() => _today = 0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +122,21 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, _s),
                   child: const Text('Save'),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Focus sessions today: $_today',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _today == 0 ? null : _confirmResetToday,
+                  child: const Text('Reset'),
                 ),
               ],
             ),
