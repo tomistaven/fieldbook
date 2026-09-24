@@ -1,18 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../domain/entities/pomodoro.dart';
+import '../../../domain/services/phase_notifier.dart';
 import 'pomodoro_state.dart';
 
 /// Countdown is derived from an absolute end time, so it stays correct
 /// while the app is backgrounded. Timer state is persisted so a killed
 /// process resumes where it was.
+///
+/// A system notification is scheduled only while the app is hidden; in the
+/// foreground the shell's phase banner covers the alert.
 class PomodoroCubit extends Cubit<PomodoroState> {
-  PomodoroCubit(this._prefs) : super(_restore(_prefs)) {
+  PomodoroCubit(this._prefs, this._notifier) : super(_restore(_prefs)) {
+    _lifecycle = AppLifecycleListener(onHide: _onHide, onShow: _onShow);
+    // Created at launch, so the app is visible: any alert still pending or
+    // shown from a previous session is stale.
+    unawaited(_notifier.cancelPhaseEnd());
     _endsAt = _readEndsAt(_prefs);
     if (state.status == TimerStatus.running) {
       if (_endsAt == null || !_endsAt!.isAfter(DateTime.now())) {
@@ -25,8 +34,11 @@ class PomodoroCubit extends Cubit<PomodoroState> {
   }
 
   final SharedPreferences _prefs;
+  final PhaseNotifier _notifier;
+  late final AppLifecycleListener _lifecycle;
   Timer? _ticker;
   DateTime? _endsAt;
+  bool _hidden = false;
 
   // Preference keys
   static const _kFocus = 'pomo.focusMinutes';
@@ -41,6 +53,7 @@ class PomodoroCubit extends Cubit<PomodoroState> {
   static const _kCycle = 'pomo.focusInCycle';
   static const _kTodayDate = 'pomo.todayDate';
   static const _kTodayCount = 'pomo.todayCount';
+  static const _kNotifyAsked = 'pomo.notificationPermissionAsked';
 
   static String _todayKey() {
     final n = DateTime.now();
@@ -101,6 +114,10 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     emit(state.copyWith(status: TimerStatus.running));
     _startTicker();
     _persistTimer();
+    unawaited(_askNotificationPermissionOnce());
+    // Reached while hidden only through auto-start, when the Dart isolate
+    // is still alive after the previous phase ended in the background.
+    if (_hidden) _schedulePhaseEnd();
   }
 
   void pause() {
@@ -155,6 +172,43 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     await _prefs.setInt(_kSessions, s.sessionsBeforeLongBreak);
     await _prefs.setBool(_kAuto, s.autoStartNext);
     await _persistTimer();
+  }
+
+  void _onHide() {
+    _hidden = true;
+    _schedulePhaseEnd();
+  }
+
+  void _onShow() {
+    _hidden = false;
+    // Also clears a delivered alert from the tray; the ticker completes the
+    // phase and the in-app banner takes over.
+    unawaited(_notifier.cancelPhaseEnd());
+  }
+
+  void _schedulePhaseEnd() {
+    final endsAt = _endsAt;
+    if (state.status != TimerStatus.running || endsAt == null) return;
+    final next = nextPhase(
+      current: state.phase,
+      focusInCycle: state.focusInCycle,
+      settings: state.settings,
+      completed: true,
+    ).next;
+    unawaited(_notifier.schedulePhaseEnd(
+      at: endsAt,
+      finished: state.phase,
+      next: next,
+    ));
+  }
+
+  /// Prompts on the first start rather than at launch, so the request has
+  /// visible context. Asked once; after that the choice is left to system
+  /// settings.
+  Future<void> _askNotificationPermissionOnce() async {
+    if (_prefs.getBool(_kNotifyAsked) ?? false) return;
+    await _prefs.setBool(_kNotifyAsked, true);
+    await _notifier.requestPermission();
   }
 
   void _startTicker() {
@@ -230,6 +284,7 @@ class PomodoroCubit extends Cubit<PomodoroState> {
   @override
   Future<void> close() {
     _ticker?.cancel();
+    _lifecycle.dispose();
     return super.close();
   }
 }

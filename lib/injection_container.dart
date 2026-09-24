@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/datasources/app_database.dart';
 import 'data/datasources/encryption_service.dart';
+import 'data/datasources/notification_service.dart';
 import 'data/repositories/flashcard_repository_impl.dart';
 import 'data/repositories/note_repository_impl.dart';
 import 'data/repositories/shopping_repository_impl.dart';
@@ -11,6 +12,7 @@ import 'domain/repositories/flashcard_repository.dart';
 import 'domain/repositories/note_repository.dart';
 import 'domain/repositories/shopping_repository.dart';
 import 'domain/repositories/todo_repository.dart';
+import 'domain/services/phase_notifier.dart';
 import 'presentation/flashcards/cubit/decks_cubit.dart';
 import 'presentation/focus/cubit/pomodoro_cubit.dart';
 import 'presentation/notes/cubit/notes_cubit.dart';
@@ -22,9 +24,10 @@ final sl = GetIt.instance;
 
 /// Registers all app-scoped dependencies with the get_it service locator.
 ///
-/// Call once in [main] before [runApp]. [SharedPreferences] and
-/// [EncryptionService] need async setup, so they are initialised here and
-/// registered as ready instances; everything else is a lazy singleton.
+/// Call once in [main] before [runApp]. [SharedPreferences],
+/// [EncryptionService] and [NotificationService] need async setup, so they
+/// are initialised here and registered as ready instances; everything else
+/// is a lazy singleton.
 ///
 /// Screen-scoped cubits (DeckCardsCubit, StudyCubit) are NOT registered here;
 /// they are created by their screens and closed with them.
@@ -35,6 +38,10 @@ Future<void> initDependencies() async {
   final encryption = EncryptionService();
   await encryption.init();
   sl.registerSingleton<EncryptionService>(encryption);
+
+  final notifications = NotificationService();
+  await notifications.init();
+  sl.registerSingleton<PhaseNotifier>(notifications);
 
   sl.registerLazySingleton<AppDatabase>(AppDatabase.new);
 
@@ -62,7 +69,7 @@ Future<void> initDependencies() async {
     () => ShoppingCubit(sl<ShoppingRepository>()),
   );
   sl.registerLazySingleton<PomodoroCubit>(
-    () => PomodoroCubit(sl<SharedPreferences>()),
+    () => PomodoroCubit(sl<SharedPreferences>(), sl<PhaseNotifier>()),
   );
   sl.registerLazySingleton<NotesCubit>(() => NotesCubit(sl<NoteRepository>()));
   sl.registerLazySingleton<DecksCubit>(
