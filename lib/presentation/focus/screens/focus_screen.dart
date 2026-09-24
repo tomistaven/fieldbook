@@ -26,9 +26,9 @@ class FocusScreen extends StatelessWidget {
               final cubit = context.read<PomodoroCubit>();
               final updated = await showPomodoroSettings(
                 context,
-                cubit.state.settings,
-                completedToday: cubit.state.completedToday,
+                cubit.state,
                 onResetToday: cubit.resetToday,
+                onResetCycle: cubit.resetCycle,
               );
               if (updated != null) await cubit.updateSettings(updated);
             },

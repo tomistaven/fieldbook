@@ -29,6 +29,13 @@ class PomodoroState extends Equatable {
 
   Duration get total => settings.durationOf(phase);
 
+  /// Idle at the start of the first focus session of a cycle, which is
+  /// where `PomodoroCubit.resetCycle()` leaves the timer.
+  bool get atCycleStart =>
+      focusInCycle == 0 &&
+      phase == PomodoroPhase.focus &&
+      status == TimerStatus.idle;
+
   double get progress {
     final totalMs = total.inMilliseconds;
     if (totalMs == 0) return 0;

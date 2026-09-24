@@ -2,46 +2,49 @@ import 'package:flutter/material.dart';
 
 import '../../../core/widgets/dialogs.dart';
 import '../../../domain/entities/pomodoro.dart';
+import '../cubit/pomodoro_state.dart';
 
 /// Returns the edited settings on Save, or null if dismissed.
 ///
-/// [onResetToday] runs immediately after confirmation, independent of Save,
-/// because the daily count is data rather than a setting.
+/// [onResetToday] and [onResetCycle] run immediately after confirmation,
+/// independent of Save, because they act on timer data rather than settings.
 Future<PomodoroSettings?> showPomodoroSettings(
   BuildContext context,
-  PomodoroSettings current, {
-  required int completedToday,
+  PomodoroState state, {
   required Future<void> Function() onResetToday,
+  required VoidCallback onResetCycle,
 }) {
   return showModalBottomSheet<PomodoroSettings>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _SettingsSheet(
-      initial: current,
-      completedToday: completedToday,
+      state: state,
       onResetToday: onResetToday,
+      onResetCycle: onResetCycle,
     ),
   );
 }
 
 class _SettingsSheet extends StatefulWidget {
   const _SettingsSheet({
-    required this.initial,
-    required this.completedToday,
+    required this.state,
     required this.onResetToday,
+    required this.onResetCycle,
   });
 
-  final PomodoroSettings initial;
-  final int completedToday;
+  final PomodoroState state;
   final Future<void> Function() onResetToday;
+  final VoidCallback onResetCycle;
 
   @override
   State<_SettingsSheet> createState() => _SettingsSheetState();
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
-  late PomodoroSettings _s = widget.initial;
-  late int _today = widget.completedToday;
+  late PomodoroSettings _s = widget.state.settings;
+  late int _today = widget.state.completedToday;
+  late int _cycleCount = widget.state.focusInCycle;
+  late bool _atCycleStart = widget.state.atCycleStart;
 
   Future<void> _confirmResetToday() async {
     final confirmed = await showConfirmDialog(
@@ -54,6 +57,22 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     if (!confirmed || !mounted) return;
     await widget.onResetToday();
     if (mounted) setState(() => _today = 0);
+  }
+
+  Future<void> _confirmResetCycle() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Reset cycle?',
+      message: 'The cycle dots go back to 0 and the timer returns to the '
+          "start of a focus session. Today's count is not changed.",
+      confirmLabel: 'Reset',
+    );
+    if (!confirmed || !mounted) return;
+    widget.onResetCycle();
+    setState(() {
+      _cycleCount = 0;
+      _atCycleStart = true;
+    });
   }
 
   @override
@@ -126,23 +145,35 @@ class _SettingsSheetState extends State<_SettingsSheet> {
               ],
             ),
             const Divider(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Focus sessions today: $_today',
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                ),
-                TextButton(
-                  onPressed: _today == 0 ? null : _confirmResetToday,
-                  child: const Text('Reset'),
-                ),
-              ],
+            _ResetRow(
+              label: 'Focus sessions today: $_today',
+              onReset: _today == 0 ? null : _confirmResetToday,
+            ),
+            _ResetRow(
+              label: 'Sessions this cycle: $_cycleCount',
+              onReset: _atCycleStart ? null : _confirmResetCycle,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A count with a Reset button, disabled when [onReset] is null.
+class _ResetRow extends StatelessWidget {
+  const _ResetRow({required this.label, required this.onReset});
+
+  final String label;
+  final VoidCallback? onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
+        TextButton(onPressed: onReset, child: const Text('Reset')),
+      ],
     );
   }
 }

@@ -167,6 +167,21 @@ class PomodoroCubit extends Cubit<PomodoroState> {
     await _prefs.setInt(_kTodayCount, 0);
   }
 
+  /// Starts over at the first focus session of a cycle: clears the cycle
+  /// count, stops the timer and returns to a full focus phase. The daily
+  /// count is kept.
+  void resetCycle() {
+    _ticker?.cancel();
+    _endsAt = null;
+    emit(state.copyWith(
+      phase: PomodoroPhase.focus,
+      focusInCycle: 0,
+      status: TimerStatus.idle,
+      remaining: state.settings.durationOf(PomodoroPhase.focus),
+    ));
+    _persistTimer();
+  }
+
   Future<void> updateSettings(PomodoroSettings s) async {
     final idle = state.status == TimerStatus.idle;
     emit(state.copyWith(
