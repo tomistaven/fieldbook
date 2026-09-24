@@ -86,46 +86,84 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  static const _focusTab = 2;
+
   int _index = 0;
 
-  // Each tab gets its own ScaffoldMessenger so its snackbars attach to the
-  // tab's Scaffold (and lift its FAB) instead of the outer shell Scaffold.
-  static const _tabs = <Widget>[
-    ScaffoldMessenger(child: TodoScreen()),
-    ScaffoldMessenger(child: ShoppingScreen()),
-    ScaffoldMessenger(child: PomodoroScreen()),
-    ScaffoldMessenger(child: NotesScreen()),
-    ScaffoldMessenger(child: DecksScreen()),
+  // Each tab gets its own ScaffoldMessenger so snackbars and banners attach
+  // to the tab's Scaffold (below its AppBar, above its FAB) instead of the
+  // outer shell Scaffold. Keys let the shell show a banner on the open tab.
+  final _messengers = List.generate(
+    _screens.length,
+    (_) => GlobalKey<ScaffoldMessengerState>(),
+  );
+
+  static const _screens = <Widget>[
+    TodoScreen(),
+    ShoppingScreen(),
+    PomodoroScreen(),
+    NotesScreen(),
+    DecksScreen(),
   ];
+
+  void _select(int index) {
+    _clearBanners();
+    setState(() => _index = index);
+  }
+
+  void _clearBanners() {
+    for (final key in _messengers) {
+      key.currentState?.clearMaterialBanners();
+    }
+  }
+
+  /// Phase-finished alert, shown at the top of whichever tab is open.
+  void _showPhaseBanner(PomodoroState state) {
+    final done = state.lastCompleted;
+    if (done == null) return;
+    final messenger = _messengers[_index].currentState;
+    if (messenger == null) return;
+
+    final message = done == PomodoroPhase.focus
+        ? 'Focus session done. Time for a ${state.phase.label.toLowerCase()}.'
+        : 'Break over. Ready to focus?';
+
+    _clearBanners();
+    messenger.showMaterialBanner(
+      MaterialBanner(
+        content: Text(message),
+        leading: Icon(Icons.timer, color: done.color),
+        actions: [
+          if (_index != _focusTab)
+            TextButton(
+              onPressed: () => _select(_focusTab),
+              child: const Text('Open'),
+            ),
+          TextButton(
+            onPressed: _clearBanners,
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<PomodoroCubit, PomodoroState>(
-      // Shell-level so the alert shows whichever tab is open.
       listenWhen: (a, b) => a.completedSignal != b.completedSignal,
-      listener: (context, state) {
-        final done = state.lastCompleted;
-        if (done == null) return;
-        final message = done == PomodoroPhase.focus
-            ? 'Focus session done. Time for a ${state.phase.label.toLowerCase()}.'
-            : 'Break over. Ready to focus?';
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(
-            content: Text(message),
-            action: _index == 2
-                ? null
-                : SnackBarAction(
-                    label: 'Open',
-                    onPressed: () => setState(() => _index = 2),
-                  ),
-          ));
-      },
+      listener: (context, state) => _showPhaseBanner(state),
       child: Scaffold(
-        body: IndexedStack(index: _index, children: _tabs),
+        body: IndexedStack(
+          index: _index,
+          children: [
+            for (var i = 0; i < _screens.length; i++)
+              ScaffoldMessenger(key: _messengers[i], child: _screens[i]),
+          ],
+        ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
+          onDestinationSelected: _select,
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.check_circle_outline),
