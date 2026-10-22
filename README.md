@@ -6,13 +6,7 @@ A pocket organiser for everyday life: todos, a shopping list, a Pomodoro timer, 
 
 ## Screenshots
 
-| Todos | Shopping | Focus | Notes |
-| --- | --- | --- | --- |
-| ![Todo list with filter chips and an overdue item](screenshots/01_todos.png) | ![Shopping list with items to buy and an In cart section](screenshots/02_shopping.png) | ![Pomodoro timer ring with cycle dots](screenshots/03_focus.png) | ![Notes list with search and a pinned note](screenshots/04_notes.png) |
-
-| Note Editor | Decks | Study | Settings |
-| --- | --- | --- | --- |
-| ![Note editor with title and body](screenshots/05_note_editor.png) | ![Flashcard decks with learned progress](screenshots/06_decks.png) | ![Study session showing a revealed card](screenshots/07_study.png) | ![Settings screen with theme options](screenshots/08_settings.png) |
+*Screenshots to be added.*
 
 ---
 
@@ -32,8 +26,6 @@ A pocket organiser for everyday life: todos, a shopping list, a Pomodoro timer, 
 ## Project Overview
 
 Fieldbook is a Flutter app for Android that gathers five everyday tools behind a bottom navigation bar: **Todos**, **Shopping**, **Focus** (a Pomodoro timer), **Notes**, and **Cards** (flashcards). Everything is stored locally in an SQLite database. Notes are encrypted at rest. The app needs no account and no network connection.
-
-Fieldbook started as a job-tracker coursework project (kood/Jõhvi mobile Task 1) and was rebuilt from scratch after graduation as a personal productivity app.
 
 For the architecture, database, timer, encryption, and study-session internals in depth, see [TECHNICAL_OVERVIEW.md](TECHNICAL_OVERVIEW.md).
 
@@ -218,13 +210,9 @@ Open Settings from the gear icon to choose between system, light, and dark theme
 
 ## Design Decisions and Challenges
 
-### Rebuilt rather than repurposed
+### Bottom navigation with Settings in the top bar
 
-Fieldbook began as a job-tracker coursework app. Rather than bending that code into a different product, it was started as a new Flutter project and a new repository, with the app source written fresh. The native Android folder came clean from `flutter create` with the right package ID, and the history starts at the new app instead of carrying the coursework review phases.
-
-### Bottom navigation, not a floating hub
-
-Doodlingz uses a radial tool hub to keep its drawing canvas unobstructed. Fieldbook has no canvas to protect and depends on fast switching between distinct tools, so a standard five-item bottom navigation bar is the better fit. Settings sits behind a gear icon in the top bar, because a sixth destination would exceed Material's five-item guideline.
+Fieldbook depends on fast switching between five distinct tools, so a standard five-item bottom navigation bar is the best fit. Settings sits behind a gear icon in the top bar, because a sixth destination would exceed Material's five-item guideline.
 
 ### Reactive database streams instead of manual refreshes
 
@@ -260,7 +248,7 @@ Notes are the only free-form personal writing in the app, so their title and bod
 
 ### Bundled font instead of `google_fonts`
 
-Doodlingz bundles its fonts through `google_fonts` with runtime fetching disabled. Fieldbook declares Inter's static weights (Regular, Medium, SemiBold, Bold) directly in `pubspec.yaml` instead. The result is the same offline guarantee with one fewer dependency. Using static files avoids variable-font weight handling, and the 18pt optical size suits body text.
+Fieldbook declares Inter's static weights (Regular, Medium, SemiBold, Bold) directly in `pubspec.yaml`. The font ships with the app, so it works offline without adding the `google_fonts` package. Using static files avoids variable-font weight handling, and the 18pt optical size suits body text.
 
 ---
 
